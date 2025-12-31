@@ -1,0 +1,14 @@
+streamlit
+ultralytics
+opencv-python
+pandas
+numpy
+easyocr
+python-bidi
+arabic-reshaper
+Pillow
+openpyxl
+python-docx
+spacy
+PyPDF2
+tqdm
