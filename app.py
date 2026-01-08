@@ -148,15 +148,20 @@ elif mode == "📄 Datasheet OCR & Validation":
     uploaded_docs = st.file_uploader("Upload Documents", type=['jpg', 'png', 'jpeg', 'pdf', 'docx'], accept_multiple_files=True)
     
     if uploaded_docs:
+
+        # Initialize session state for this module
+        if 'ocr_results' not in st.session_state:
+            st.session_state.ocr_results = {}
+            
+        # Process Button
         if st.button("🔍 Extract & Validate All", type="primary"):
+            st.session_state.ocr_results = {} # Clear previous
+            
             # Import Logic Here (Lazy Loading)
             try:
                 from ocr_module.interface import extract_and_validate
                 
                 for uploaded_doc in uploaded_docs:
-                    st.divider()
-                    st.markdown(f"### 📄 Processing: {uploaded_doc.name}")
-                    
                     # Handle File Extensions
                     file_ext = os.path.splitext(uploaded_doc.name)[1].lower()
                     suffix = file_ext if file_ext in ['.pdf', '.docx', '.jpg', '.png', '.jpeg'] else ".jpg"
@@ -166,48 +171,111 @@ elif mode == "📄 Datasheet OCR & Validation":
                     tfile.write(uploaded_doc.read())
                     tfile.close()
                     
-                    # Simple Preview for Images
-                    if suffix in ['.jpg', '.png', '.jpeg']:
-                         st.image(uploaded_doc, caption="Document Preview", width=250)
-                    
                     with st.spinner(f"Reading {uploaded_doc.name}..."):
                         specs, report = extract_and_validate(tfile.name)
                         
-                        # 1. Extracted Data Section
-                        st.markdown("**📋 Extracted Specifications**")
-                        # Clean Keys for Display (e.g., voltage_rating -> Voltage Rating)
-                        clean_specs = {k.replace('_', ' ').title(): v for k, v in specs.items() if v}
+                        # Store in session state
+                        st.session_state.ocr_results[uploaded_doc.name] = {
+                            "specs": specs,
+                            "report": report,
+                            "suffix": suffix,
+                            "doc_obj": uploaded_doc # Store ref to display image 
+                        }
                         
-                        if clean_specs:
-                            st.table(pd.DataFrame(list(clean_specs.items()), columns=["Parameter", "Value"]))
-                        else:
-                            st.warning("⚠️ No specifications could be extracted.")
-                        
-                        # 2. Validation Report Section
-                        st.markdown("**🛡️ Engineering Validation**")
-                        status = report.get("status", "UNKNOWN")
-                        
-                        if status == "READY":
-                            st.markdown('<div class="success-box">✅ Status: APPROVED (Ready for Production)</div>', unsafe_allow_html=True)
-                        elif status == "UNVERIFIABLE":
-                            st.warning(f"⚠️ Status: {status} (Missing Critical Information)")
-                        else:
-                            st.markdown(f'<div class="error-box">❌ Status: {status} (Violations Found)</div>', unsafe_allow_html=True)
-                        
-                        # Show Specific Errors
-                        if report.get("errors"):
-                            for err in report["errors"]:
-                                st.error(f"🔴 {err}")
-                        elif status == "READY":
-                            st.info("✨ No engineering violations detected.")
-
                     # Cleanup
                     os.unlink(tfile.name)
-
+                    
             except ImportError:
                 st.error("❌ Error: 'ocr_module' not found. Please check folder structure.")
             except Exception as e:
                 st.error(f"❌ System Error: {e}")
+
+        # --- DISPLAY RESULTS (Persist across re-runs) ---
+        if 'ocr_results' in st.session_state and st.session_state.ocr_results:
+             for doc_name, res in st.session_state.ocr_results.items():
+                specs = res['specs']
+                report = res['report']
+                doc_obj = res['doc_obj']
+                suffix = res['suffix']
+
+                st.divider()
+                st.markdown(f"### 📄 Processing: {doc_name}")
+                
+                # Simple Preview for Images
+                if suffix in ['.jpg', '.png', '.jpeg']:
+                        st.image(doc_obj, caption="Document Preview", width=250)
+                
+                # 1. Extracted Data Section
+                st.markdown("**📋 Extracted Specifications**")
+                
+                # Copy specs to avoid mutating session state in place repeatedly
+                display_specs = specs.copy()
+                
+                # Handle Special Fields for Better UI
+                category = display_specs.pop('cable_category', "Uncategorized")
+                top_terms = display_specs.pop('top_terms', "None")
+                conductor_type = display_specs.pop('conductor_type_keyword', "None")
+                
+                # --- KEYWORD GEN DISPLAY (Interactive Button) ---
+                st.markdown("### 🔢 Keyword Generation Report")
+                
+                # Use a unique key for each button based on filename to avoid ID conflicts
+                if st.button("Generate Keywords", type="primary", key=f"btn_{doc_name}"):
+                        # Retrieve raw data passed from backend
+                        kw_details = report.get('keyword_details', {})
+                        real_category = kw_details.get('category', 'Unknown')
+                        real_data = kw_details.get('extracted_data', {})
+                        
+                        # Build Real Report
+                        report_text = f"KEYWORD GEN: CATEGORY: {real_category}\n"
+                        report_text += "KEYWORD GEN: EXTRACTED DATA:\n"
+                        
+                        # Iterate over all extracted keys
+                        for k, v in real_data.items():
+                            if k == "Top Terms":
+                                continue 
+                            
+                            # Format list values
+                            val_str = ", ".join(v) if isinstance(v, list) else str(v)
+                            report_text += f"  {k}: {val_str}\n"
+
+                        # Add Top Terms at the end
+                        if "Top Terms" in real_data:
+                            tt = ", ".join(real_data["Top Terms"])
+                            report_text += f"  Top Terms: {tt}"
+
+                        st.code(report_text, language="yaml")
+                        
+                        # Debugging: Show Raw Text
+                        with st.expander("🔍 Debug: View Raw OCR Text"):
+                            st.text(kw_details.get('full_text_debug', 'No text available'))
+                # ---------------------------------------------------
+
+                # Clean Keys for Display (e.g., voltage_rating -> Voltage Rating)
+                clean_specs = {k.replace('_', ' ').title(): v for k, v in display_specs.items() if v}
+                
+                if clean_specs:
+                    st.table(pd.DataFrame(list(clean_specs.items()), columns=["Parameter", "Value"]))
+                else:
+                    st.warning("⚠️ No specifications could be extracted.")
+                
+                # 2. Validation Report Section
+                st.markdown("**🛡️ Engineering Validation**")
+                status = report.get("status", "UNKNOWN")
+                
+                if status == "READY":
+                    st.markdown('<div class="success-box">✅ Status: APPROVED (Ready for Production)</div>', unsafe_allow_html=True)
+                elif status == "UNVERIFIABLE":
+                    st.warning(f"⚠️ Status: {status} (Missing Critical Information)")
+                else:
+                    st.markdown(f'<div class="error-box">❌ Status: {status} (Violations Found)</div>', unsafe_allow_html=True)
+                
+                # Show Specific Errors
+                if report.get("errors"):
+                    for err in report["errors"]:
+                        st.error(f"🔴 {err}")
+                elif status == "READY":
+                    st.info("✨ No engineering violations detected.")
 
 # ==========================================
 # 5. FOOTER

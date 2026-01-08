@@ -16,6 +16,17 @@ except ImportError:
     from src.extraction import SpecificationExtractor, SpecCorrector
     from src.validation import CableValidator
 
+# Import Keyword Tool at module level
+try:
+    from ocr_module.keyword_gen_module.keyword_tool import CableClassifier, KeywordExtractor
+except ImportError:
+    try:
+        from .keyword_gen_module.keyword_tool import CableClassifier, KeywordExtractor
+    except ImportError:
+        sys.path.append(os.path.join(os.path.dirname(__file__), 'keyword_gen_module'))
+        from keyword_tool import CableClassifier, KeywordExtractor
+
+
 def extract_and_validate(image_path):
     """
     Extracts cable specifications from an image and validates them.
@@ -31,11 +42,9 @@ def extract_and_validate(image_path):
 
     try:
         # 1. Initialize OCR Engine
-        # Using 'en' as default. You can add 'ar' if Arabic support determines it's needed.
         ocr = OCREngine(languages=['en'])
         
         # 2. Read Text
-        # detail=0 returns a list of strings
         results = ocr.read_image(image_path, detail=0)
         full_text = " ".join(results)
         
@@ -53,6 +62,39 @@ def extract_and_validate(image_path):
         
         # Add correction logs to report for visibility if needed
         validation_report['correction_logs'] = logs
+        
+        # =============================================
+        # 6. NEW: Keyword Generation Integration
+        # =============================================
+        try:
+            classifier = CableClassifier()
+            kw_extractor = KeywordExtractor()
+            
+            category = classifier.classify(full_text)
+            keywords = kw_extractor.extract_keywords(full_text)
+            
+            # Merge into specs
+            corrected_specs['cable_category'] = category
+            if keywords.get('Top Terms'):
+                corrected_specs['top_terms'] = ", ".join(keywords['Top Terms'])
+            if keywords.get('Conductor Type'):
+                corrected_specs['conductor_type_keyword'] = ", ".join(keywords['Conductor Type'])
+
+            # Store full keyword details in report for UI "Generate Keywords" button
+            validation_report['keyword_details'] = {
+                "category": category,
+                "extracted_data": keywords,
+                "full_text_debug": full_text
+            }
+
+        except Exception as kw_error:
+            validation_report.setdefault('warnings', []).append(f"Keyword Gen Failed: {str(kw_error)}")
+            validation_report['keyword_details'] = {
+                "category": "Error",
+                "extracted_data": {},
+                "full_text_debug": full_text
+            }
+        # =============================================
         
         return corrected_specs, validation_report
         

@@ -94,7 +94,8 @@ class KeywordExtractor:
     def __init__(self):
         # Regex patterns for common electrical specs
         self.patterns = {
-            "Voltage": r'\b\d+(?:\.\d+)?\s*k?V\b', # Matches 11kV, 400V, 33 kV
+            # Updated to handle ranges like 450/750 V
+            "Voltage": r'\b\d+(?:[.,/]\d+)*\s*k?V\b', 
             "Current": r'\b\d+(?:\.\d+)?\s*A\b',  # Matches 100A, 630 A
             "CrossSection": r'\b\d+(?:\.\d+)?\s*mm2\b', # Matches 120mm2
             "Cores": r'\b(?<![-+])\d{1,2}C\b|\b\d+\s*Core\b', # Matches 3C, 4 Core
