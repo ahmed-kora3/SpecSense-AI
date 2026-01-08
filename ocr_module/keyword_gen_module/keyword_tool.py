@@ -221,12 +221,27 @@ class CableClassifier:
         # Medium Voltage: up to 18/30 kV (max ~30000V)
         # High Voltage: up to 500 kV (>30000V)
         
-        voltage_matches = re.findall(r'\b(\d+(?:\.\d+)?)\s*(k?V)\b', text, re.IGNORECASE)
+        # First, preprocess text to fix OCR errors
+        text = re.sub(r'(\d)O(\d)', r'\g<1>0\2', text)
+        text = re.sub(r'(\d)S(\d)', r'\g<1>5\2', text)
+        text = re.sub(r'(\d)O\s*V', r'\g<1>0 V', text)
+        text = re.sub(r'(\d)S\s*V', r'\g<1>5 V', text)
+        
+        # Match voltage patterns including ranges like 450/750V, 0.6/1kV
+        # This captures the SECOND number in a range (which is usually higher)
+        voltage_matches = re.findall(r'(\d+(?:\.\d+)?)\s*(?:/\s*(\d+(?:\.\d+)?))?\s*(k?V)\b', text, re.IGNORECASE)
         max_voltage = 0
         
-        for val_str, unit in voltage_matches:
+        for match in voltage_matches:
             try:
-                val = float(val_str)
+                # match is a tuple: (first_num, second_num_or_empty, unit)
+                first_num = float(match[0]) if match[0] else 0
+                second_num = float(match[1]) if match[1] else 0
+                unit = match[2]
+                
+                # Take the higher of the two numbers
+                val = max(first_num, second_num)
+                
                 if unit.lower() == 'kv':
                     val *= 1000
                 if val > max_voltage:
