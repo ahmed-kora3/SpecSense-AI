@@ -110,7 +110,37 @@ class KeywordExtractor:
             "data", "sheet", "spec", "specification", "type", "rated", "nominal", "cable", "conductor"
         }
 
+    def preprocess_text(self, text):
+        """
+        Pre-process OCR text to fix common character substitutions.
+        """
+        # Fix common corrupted words
+        text = re.sub(r'C[@a]b[l1][e3]', 'Cable', text, flags=re.IGNORECASE)
+        text = re.sub(r'V[0o]ltage', 'Voltage', text, flags=re.IGNORECASE)
+        text = re.sub(r'C[ou]rr[e3]nt', 'Current', text, flags=re.IGNORECASE)
+        text = re.sub(r'C[0o]pp[\s]*[e3]r', 'Copper', text, flags=re.IGNORECASE)
+        text = re.sub(r'P[0o]w[e3]r', 'Power', text, flags=re.IGNORECASE)
+        text = re.sub(r'St[e3][e3][l1]', 'Steel', text, flags=re.IGNORECASE)
+        text = re.sub(r'W[i1]r[e3]', 'Wire', text, flags=re.IGNORECASE)
+        text = re.sub(r'Arm[0o]r', 'Armor', text, flags=re.IGNORECASE)
+        
+        # Fix numbers: O -> 0, S -> 5 (in numeric contexts)
+        text = re.sub(r'(\d)O(\d)', r'\g<1>0\2', text)
+        text = re.sub(r'(\d)S(\d)', r'\g<1>5\2', text)
+        text = re.sub(r'(\d)O\s*V', r'\g<1>0 V', text)
+        text = re.sub(r'(\d)S\s*V', r'\g<1>5 V', text)
+        text = re.sub(r'O(\d)', r'0\1', text)
+        text = re.sub(r'S(\d)', r'5\1', text)
+        
+        # Clean extra spaces in numbers
+        text = re.sub(r'(\d)\s+(\d)\s*A\b', r'\1\2A', text)
+        
+        return text
+
     def extract_keywords(self, text):
+        # Pre-process text to fix OCR errors
+        text = self.preprocess_text(text)
+        
         extracted = {}
         all_keywords = []
 

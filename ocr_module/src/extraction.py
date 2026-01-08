@@ -43,10 +43,59 @@ class SpecificationExtractor:
             }
         }
 
+    def preprocess_text(self, text):
+        """
+        Pre-process OCR text to fix common character substitutions.
+        This cleans the text BEFORE extraction patterns are applied.
+        """
+        # Common OCR substitutions in words (not in numbers)
+        word_fixes = {
+            '@': 'a',
+            '0': 'o',  # Will be handled carefully
+            '1': 'l',  # In words only
+            '3': 'e',
+            '5': 's',
+        }
+        
+        # Fix common corrupted words
+        text = re.sub(r'C[@a]b[l1][e3]', 'Cable', text, flags=re.IGNORECASE)
+        text = re.sub(r'V[0o]ltage', 'Voltage', text, flags=re.IGNORECASE)
+        text = re.sub(r'C[ou]rr[e3]nt', 'Current', text, flags=re.IGNORECASE)
+        text = re.sub(r'R[@a]t[i1]ng', 'Rating', text, flags=re.IGNORECASE)
+        text = re.sub(r'Insu[l1]at[i1][0o]n', 'Insulation', text, flags=re.IGNORECASE)
+        text = re.sub(r'C[0o]ndu[\s]*ct[0o]r', 'Conductor', text, flags=re.IGNORECASE)
+        text = re.sub(r'Sh[e3]ath', 'Sheath', text, flags=re.IGNORECASE)
+        text = re.sub(r'Arm[0o]r', 'Armor', text, flags=re.IGNORECASE)
+        text = re.sub(r'[0o]p[e3]rat[i1]ng', 'Operating', text, flags=re.IGNORECASE)
+        text = re.sub(r'T[e3]mp[\s]*[e3]ratur[e3]', 'Temperature', text, flags=re.IGNORECASE)
+        text = re.sub(r'R[e3]s[i1]stanc[e3]', 'Resistance', text, flags=re.IGNORECASE)
+        text = re.sub(r'C[0o]pp[\s]*[e3]r', 'Copper', text, flags=re.IGNORECASE)
+        text = re.sub(r'P[0o]w[e3]r', 'Power', text, flags=re.IGNORECASE)
+        text = re.sub(r'c[0o]r[e3]s?', 'cores', text, flags=re.IGNORECASE)
+        text = re.sub(r'St[e3][e3][l1]', 'Steel', text, flags=re.IGNORECASE)
+        text = re.sub(r'W[i1]r[e3]', 'Wire', text, flags=re.IGNORECASE)
+        
+        # Fix numbers: O -> 0, S -> 5 (in numeric contexts like voltage)
+        # Pattern: digit followed by O or S followed by digit or V
+        text = re.sub(r'(\d)O(\d)', r'\g<1>0\2', text)
+        text = re.sub(r'(\d)S(\d)', r'\g<1>5\2', text)
+        text = re.sub(r'(\d)O\s*V', r'\g<1>0 V', text)
+        text = re.sub(r'(\d)S\s*V', r'\g<1>5 V', text)
+        text = re.sub(r'O(\d)', r'0\1', text)  # O at start of number
+        text = re.sub(r'S(\d)', r'5\1', text)  # S at start of number
+        
+        # Clean extra spaces in numbers: "3 2 A" -> "32A"
+        text = re.sub(r'(\d)\s+(\d)\s*A\b', r'\1\2A', text)
+        
+        return text
+
     def extract_specs(self, text):
         """
         Extract specifications from full text (English Only).
         """
+        # Pre-process text to fix OCR errors
+        text = self.preprocess_text(text)
+        
         specs = {}
         for key, lang_patterns in self.patterns.items():
             specs[key] = None
